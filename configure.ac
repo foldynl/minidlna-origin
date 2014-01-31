@@ -506,6 +506,26 @@ AC_ARG_WITH(os-url,
 	[with_osurl="$withval"],[with_osurl="http://www.netgear.com"])
 AC_DEFINE_UNQUOTED([OS_URL],"${with_osurl}",[OS URL])
 
+AC_MSG_CHECKING([whether to enable GIT versioning])
+AC_ARG_ENABLE(gitversioning,
+	[  --enable-gitversioning  enable git versioning],[
+	if test "$enableval" = "yes"; then
+      AC_MSG_RESULT([yes])
+
+      AC_CHECK_PROG(GIT_VERSIONING,git, true, false)
+      if test "x$GIT_VERSIONING" = "xfalse" ; then
+         AC_MSG_ERROR([*** GIT not found but it is requested])
+      fi
+      AM_CONDITIONAL(GIT_VERSIONING, true)
+	else
+		AM_CONDITIONAL(GIT_VERSIONING, false)
+      AC_MSG_RESULT([no])
+	fi
+	],[
+		AM_CONDITIONAL(GIT_VERSIONING, false)
+      AC_MSG_RESULT([no])
+	]
+)
 
 AC_MSG_CHECKING([whether to enable TiVo support])
 AC_ARG_ENABLE(tivo,
