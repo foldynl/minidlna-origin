@@ -1,0 +1,3 @@
+Extra Features
+- dynamic versioning - version number depends on "git describe" string (git-versioning branch)
+                     - enabled by configure --enable-gitversioning

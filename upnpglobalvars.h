@@ -58,7 +58,7 @@
 #include <sqlite3.h>
 
 #ifndef MINIDLNA_VERSION
-#define MINIDLNA_VERSION "1.1.1"
+#define MINIDLNA_VERSION "1.1.1-lf"
 #endif
 
 #ifdef NETGEAR
