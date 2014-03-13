@@ -409,7 +409,7 @@ writepidfile(const char *fname, int pid, uid_t uid)
 		if (!S_ISDIR(st.st_mode))
 		{
 			DPRINTF(E_ERROR, L_GENERAL, "Pidfile path is not a directory: %s\n",
-			        fname);
+				fname);
 			return -1;
 		}
 	}
@@ -418,14 +418,14 @@ writepidfile(const char *fname, int pid, uid_t uid)
 		if (make_dir(dir, S_IRWXU|S_IRGRP|S_IXGRP|S_IROTH|S_IXOTH) != 0)
 		{
 			DPRINTF(E_ERROR, L_GENERAL, "Unable to create pidfile directory: %s\n",
-			        fname);
+				fname);
 			return -1;
 		}
-		if (uid >= 0)
+		if (uid > 0)
 		{
 			if (chown(dir, uid, -1) != 0)
 				DPRINTF(E_WARN, L_GENERAL, "Unable to change pidfile ownership: %s\n",
-				        dir, strerror(errno));
+					dir, strerror(errno));
 		}
 	}
 	
@@ -433,7 +433,7 @@ writepidfile(const char *fname, int pid, uid_t uid)
 	if (!pidfile)
 	{
 		DPRINTF(E_ERROR, L_GENERAL, "Unable to open pidfile for writing %s: %s\n",
-		        fname, strerror(errno));
+			fname, strerror(errno));
 		return -1;
 	}
 
@@ -443,16 +443,23 @@ writepidfile(const char *fname, int pid, uid_t uid)
 			"Unable to write to pidfile %s: %s\n", fname);
 		ret = -1;
 	}
-	if (uid >= 0)
+	if (uid > 0)
 	{
 		if (fchown(fileno(pidfile), uid, -1) != 0)
 			DPRINTF(E_WARN, L_GENERAL, "Unable to change pidfile ownership: %s\n",
-			        pidfile, strerror(errno));
+				pidfile, strerror(errno));
 	}
 
 	fclose(pidfile);
 
 	return ret;
+}
+
+static int strtobool(const char *str)
+{
+	return ((strcasecmp(str, "yes") == 0) ||
+		(strcasecmp(str, "true") == 0) ||
+		(atoi(str) == 1));
 }
 
 /* init phase :
@@ -483,7 +490,7 @@ init(int argc, char **argv)
 	struct media_dir_s *media_dir;
 	int ifaces = 0;
 	media_types types;
-	uid_t uid = -1;
+	uid_t uid = 0;
 
 	/* first check if "-f" option is used */
 	for (i=2; i<argc; i++)
@@ -509,6 +516,7 @@ init(int argc, char **argv)
 	
 	runtime_vars.port = 8200;
 	runtime_vars.notify_interval = 895;	/* seconds between SSDP announces */
+	runtime_vars.max_connections = 50;
 	runtime_vars.root_container = NULL;
 	runtime_vars.ifaces[0] = NULL;
 
@@ -648,15 +656,15 @@ init(int argc, char **argv)
 			log_level = ary_options[i].value;
 			break;
 		case UPNPINOTIFY:
-			if ((strcmp(ary_options[i].value, "yes") != 0) && !atoi(ary_options[i].value))
+			if (!strtobool(ary_options[i].value))
 				CLEARFLAG(INOTIFY_MASK);
 			break;
 		case ENABLE_TIVO:
-			if ((strcmp(ary_options[i].value, "yes") == 0) || atoi(ary_options[i].value))
+			if (strtobool(ary_options[i].value))
 				SETFLAG(TIVO_MASK);
 			break;
 		case ENABLE_DLNA_STRICT:
-			if ((strcmp(ary_options[i].value, "yes") == 0) || atoi(ary_options[i].value))
+			if (strtobool(ary_options[i].value))
 				SETFLAG(DLNA_STRICT_MASK);
 			break;
 		case ROOT_CONTAINER:
@@ -693,7 +701,7 @@ init(int argc, char **argv)
 			strcpy(uuidvalue+5, ary_options[i].value);
 			break;
 		case USER_ACCOUNT:
-			uid = strtol(ary_options[i].value, &string, 0);
+			uid = strtoul(ary_options[i].value, &string, 0);
 			if (*string)
 			{
 				/* Symbolic username given, not UID. */
@@ -706,9 +714,16 @@ init(int argc, char **argv)
 		case FORCE_SORT_CRITERIA:
 			force_sort_criteria = ary_options[i].value;
 			break;
+		case MAX_CONNECTIONS:
+			runtime_vars.max_connections = atoi(ary_options[i].value);
+			break;
+		case MERGE_MEDIA_DIRS:
+			if (strtobool(ary_options[i].value))
+				SETFLAG(MERGE_MEDIA_DIRS_MASK);
+			break;
 		default:
 			DPRINTF(E_ERROR, L_GENERAL, "Unknown option in file %s\n",
-			        optionsfile);
+				optionsfile);
 		}
 	}
 	if (log_path[0] == '\0')
@@ -730,7 +745,7 @@ init(int argc, char **argv)
 		}
 		else if (strcmp(argv[i], "--help") == 0)
 		{
-			runtime_vars.port = 0;
+			runtime_vars.port = -1;
 			break;
 		}
 		else switch(argv[i][1])
@@ -803,7 +818,7 @@ init(int argc, char **argv)
 			i++;	/* discarding, the config file is already read */
 			break;
 		case 'h':
-			runtime_vars.port = 0; // triggers help display
+			runtime_vars.port = -1; // triggers help display
 			break;
 		case 'R':
 			snprintf(buf, sizeof(buf), "rm -rf %s/files.db %s/art_cache", db_path, db_path);
@@ -814,7 +829,7 @@ init(int argc, char **argv)
 			if (i+1 != argc)
 			{
 				i++;
-				uid = strtol(argv[i], &string, 0);
+				uid = strtoul(argv[i], &string, 0);
 				if (*string)
 				{
 					/* Symbolic username given, not UID. */
@@ -839,6 +854,7 @@ init(int argc, char **argv)
 			break;
 		default:
 			DPRINTF(E_ERROR, L_GENERAL, "Unknown option: %s\n", argv[i]);
+			runtime_vars.port = -1; // triggers help display
 		}
 	}
 
@@ -938,9 +954,17 @@ init(int argc, char **argv)
 	if (writepidfile(pidfilename, pid, uid) != 0)
 		pidfilename = NULL;
 
-	if (uid != -1 && setuid(uid) == -1)
+	if (uid > 0)
+	{
+		struct stat st;
+		if (stat(db_path, &st) == 0 && st.st_uid != uid && chown(db_path, uid, -1) != 0)
+			DPRINTF(E_ERROR, L_GENERAL, "Unable to set db_path [%s] ownership to %d: %s\n",
+				db_path, uid, strerror(errno));
+	}
+
+	if (uid > 0 && setuid(uid) == -1)
 		DPRINTF(E_FATAL, L_GENERAL, "Failed to switch to uid '%d'. [%s] EXITING.\n",
-		        uid, strerror(errno));
+			uid, strerror(errno));
 
 	return 0;
 }
@@ -1037,7 +1061,7 @@ main(int argc, char **argv)
 		sbeacon = OpenAndConfTivoBeaconSocket();
 		if(sbeacon < 0)
 			DPRINTF(E_FATAL, L_GENERAL, "Failed to open sockets for sending Tivo beacon notify "
-		                "messages. EXITING\n");
+				"messages. EXITING\n");
 		tivo_bcast.sin_family = AF_INET;
 		tivo_bcast.sin_addr.s_addr = htonl(getBcastAddress());
 		tivo_bcast.sin_port = htons(2190);

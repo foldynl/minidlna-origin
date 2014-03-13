@@ -62,7 +62,9 @@ static const struct {
 	{ ENABLE_DLNA_STRICT, "strict_dlna" },
 	{ ROOT_CONTAINER, "root_container" },
 	{ USER_ACCOUNT, "user" },
-	{ FORCE_SORT_CRITERIA, "force_sort_criteria" }
+	{ FORCE_SORT_CRITERIA, "force_sort_criteria" },
+	{ MAX_CONNECTIONS, "max_connections" },
+	{ MERGE_MEDIA_DIRS, "merge_media_dirs" }
 };
 
 int
@@ -104,7 +106,7 @@ readoptionsfile(const char * fname)
 				t--;
 			}
 		}
-       
+
 		/* skip leading whitespaces */
 		name = buffer;
 		while(isspace(*name))
