@@ -157,41 +157,42 @@ dlna_timestamp_is_present(const char *filename, int *raw_packet_size)
 void
 check_for_captions(const char *path, int64_t detailID)
 {
-	char *file = malloc(MAXPATHLEN);
-	char *id = NULL;
+	char file[MAXPATHLEN];
+	char *p;
+	int ret;
 
-	sprintf(file, "%s", path);
-	strip_ext(file);
+	strncpyt(file, path, sizeof(file));
+	p = strip_ext(file);
+	if (!p)
+		p = strrchr(file, '\0');
 
 	/* If we weren't given a detail ID, look for one. */
-	if( !detailID )
+	if (!detailID)
 	{
-		id = sql_get_text_field(db, "SELECT ID from DETAILS where (PATH > '%q.' and PATH <= '%q.z')"
+		detailID = sql_get_int64_field(db, "SELECT ID from DETAILS where (PATH > '%q.' and PATH <= '%q.z')"
 		                            " and MIME glob 'video/*' limit 1", file, file);
-		if( id )
-		{
-			//DPRINTF(E_MAXDEBUG, L_METADATA, "New file %s looks like a caption file.\n", path);
-			detailID = strtoll(id, NULL, 10);
-		}
-		else
+		if (detailID <= 0)
 		{
 			//DPRINTF(E_MAXDEBUG, L_METADATA, "No file found for caption %s.\n", path);
-			goto no_source_video;
+			return;
 		}
 	}
 
-	strcat(file, ".srt");
-	if( access(file, R_OK) == 0 )
+	strcpy(p, ".srt");
+	ret = access(file, R_OK);
+	if (ret != 0)
+	{
+		strcpy(p, ".smi");
+		ret = access(file, R_OK);
+	}
+
+	if (ret == 0)
 	{
 		sql_exec(db, "INSERT into CAPTIONS"
 		             " (ID, PATH) "
 		             "VALUES"
 		             " (%lld, %Q)", detailID, file);
 	}
-no_source_video:
-	if( id )
-		sqlite3_free(id);
-	free(file);
 }
 
 void
@@ -387,7 +388,7 @@ GetAudioMetadata(const char *path, char *name)
 	}
 	else
 	{
-		DPRINTF(E_WARN, L_GENERAL, "Unhandled file extension on %s\n", path);
+		DPRINTF(E_WARN, L_METADATA, "Unhandled file extension on %s\n", path);
 		return 0;
 	}
 
@@ -401,7 +402,7 @@ GetAudioMetadata(const char *path, char *name)
 
 	if( readtags((char *)path, &song, &file, lang, type) != 0 )
 	{
-		DPRINTF(E_WARN, L_GENERAL, "Cannot extract tags from %s!\n", path);
+		DPRINTF(E_WARN, L_METADATA, "Cannot extract tags from %s!\n", path);
         	freetags(&song);
 		free_metadata(&m, free_flags);
 		return 0;
@@ -507,7 +508,7 @@ GetAudioMetadata(const char *path, char *name)
 	                   m.dlna_pn, song.mime?song.mime:m.mime, album_art);
 	if( ret != SQLITE_OK )
 	{
-		fprintf(stderr, "Error inserting details for '%s'!\n", path);
+		DPRINTF(E_ERROR, L_METADATA, "Error inserting details for '%s'!\n", path);
 		ret = 0;
 	}
 	else
@@ -629,7 +630,7 @@ GetImageMetadata(const char *path, char *name)
 		/* We might need to verify that the thumbnail is 160x160 or smaller */
 		if( ed->size > 12000 )
 		{
-			imsrc = image_new_from_jpeg(NULL, 0, (char *)ed->data, ed->size, 1, ROTATE_NONE);
+			imsrc = image_new_from_jpeg(NULL, 0, ed->data, ed->size, 1, ROTATE_NONE);
 			if( imsrc )
 			{
  				if( (imsrc->width <= 160) && (imsrc->height <= 160) )
@@ -690,7 +691,7 @@ no_exifdata:
 	                   m.rotation, thumb, m.creator, m.dlna_pn, m.mime);
 	if( ret != SQLITE_OK )
 	{
-		fprintf(stderr, "Error inserting details for '%s'!\n", path);
+		DPRINTF(E_ERROR, L_METADATA, "Error inserting details for '%s'!\n", path);
 		ret = 0;
 	}
 	else
@@ -1602,7 +1603,7 @@ video_no_dlna:
                            m.mime, album_art);
 	if( ret != SQLITE_OK )
 	{
-		fprintf(stderr, "Error inserting details for '%s'!\n", path);
+		DPRINTF(E_ERROR, L_METADATA, "Error inserting details for '%s'!\n", path);
 		ret = 0;
 	}
 	else

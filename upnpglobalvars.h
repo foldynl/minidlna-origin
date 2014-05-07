@@ -75,6 +75,7 @@
 #else
 #define _(string) (string)
 #endif
+#define THISORNUL(s) (s ? s : "")
 
 #ifndef PNPX
 #define PNPX 0
