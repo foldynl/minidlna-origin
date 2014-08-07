@@ -1,4 +1,4 @@
-/* MiniDLNA project
+   /* MiniDLNA project
  *
  * http://sourceforge.net/projects/minidlna/
  *
@@ -58,7 +58,7 @@
 #include <sqlite3.h>
 
 #ifndef MINIDLNA_VERSION
-#define MINIDLNA_VERSION "1.1.2-lf"
+#define MINIDLNA_VERSION "1.1.4-lf"
 #endif
 
 #ifdef NETGEAR
