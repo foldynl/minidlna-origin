@@ -33,6 +33,13 @@
 #include <unistd.h>
 #include <setjmp.h>
 #include <jpeglib.h>
+#include <fcntl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+
 #ifdef HAVE_MACHINE_ENDIAN_H
 #include <machine/endian.h>
 #else
@@ -857,4 +864,77 @@ image_save_to_jpeg_file(image_s * pimage, char * path)
 	free(buf);
 
 	return (nwritten == size) ? path : NULL;
+}
+
+/* It rotates image file base on EXIF ROTATION information */
+/* Original file is not touched, it is created new temporary file */
+
+int
+do_rotation( char *filename, int rotation )
+{
+	FILE *newfd, *ifd;
+	char temp_dir[]="/tmp";
+	char temp_filename_prefix[]="img";
+	char *temp_filename = NULL;
+	pid_t pid;
+	int status;
+	char rotation_str[4];
+
+	ifd = fopen(filename, "r");
+	if ( !ifd )
+	{
+		return -1;
+	}
+
+	temp_filename = tempnam(temp_dir, temp_filename_prefix);
+
+	if ( ! temp_filename )
+	{
+		DPRINTF(E_WARN, L_METADATA, "cannot generate temp filename\n");
+		return fileno(ifd);
+	}
+
+	if ( ( pid = fork()) < 0 )
+	{
+		DPRINTF(E_WARN, L_METADATA, "rotation fork failed\n");
+		free(temp_filename);
+		return fileno(ifd);
+	}
+	else if ( pid == 0 )
+	{
+		sprintf(rotation_str, "%d", rotation);
+		DPRINTF(E_WARN, L_METADATA, "rotate %d\n", rotation);
+		execlp("jpegtran", "jpegtran", "-copy", "none", "-optimize", "-rotate", rotation_str,
+                       "-outfile", temp_filename, filename, NULL);
+		DPRINTF(E_WARN, L_METADATA, "cannot exec jpegtran\n");
+		exit(1);
+	}
+	else
+	{
+		waitpid(pid, &status, 0);
+		DPRINTF(E_WARN, L_METADATA, "jpegtrans finished\n");
+		if ( !WIFEXITED(status) || WEXITSTATUS(status) != 0 )
+		{
+			DPRINTF(E_WARN, L_METADATA, "jpegtran got exitcode %d\n", status >> 8);
+			free(temp_filename);
+			return fileno(ifd);
+		}
+
+		/* picture processing is done */
+		newfd = fopen(temp_filename, "r");
+		if ( !newfd )
+		{
+			DPRINTF(E_WARN, L_METADATA, "Cannot open tempfile\n");
+			free(temp_filename);
+			return fileno(ifd);
+		}
+		/* it is not needed to store this file pernamently */
+		/* therefore the file will be immediately unlinked. */
+		/* file descriptor will be still valid but after calling close */
+		/* file will be deleted by OS */
+		unlink(temp_filename);
+		free(temp_filename);
+		return fileno(newfd);
+	}
+return fileno(ifd);
 }

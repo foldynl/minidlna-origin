@@ -1791,6 +1791,7 @@ SendResp_dlnafile(struct upnphttp *h, char *object)
 	                char path[PATH_MAX];
 	                char mime[32];
 	                char dlna[96];
+	                int rotation;
 	              } last_file = { 0, 0 };
 #if USE_FORK
 	pid_t newpid = 0;
@@ -1815,7 +1816,7 @@ SendResp_dlnafile(struct upnphttp *h, char *object)
 	}
 	if( id != last_file.id || ctype != last_file.client )
 	{
-		snprintf(buf, sizeof(buf), "SELECT PATH, MIME, DLNA_PN from DETAILS where ID = '%lld'", (long long)id);
+		snprintf(buf, sizeof(buf), "SELECT PATH, MIME, DLNA_PN, ROTATION from DETAILS where ID = '%lld'", (long long)id);
 		ret = sql_get_table(db, buf, &result, &rows, NULL);
 		if( (ret != SQLITE_OK) )
 		{
@@ -1823,7 +1824,7 @@ SendResp_dlnafile(struct upnphttp *h, char *object)
 			Send500(h);
 			return;
 		}
-		if( !rows || !result[3] || !result[4] )
+		if( !rows || !result[4] || !result[5] )
 		{
 			DPRINTF(E_WARN, L_HTTP, "%s not found, responding ERROR 404\n", object);
 			sqlite3_free_table(result);
@@ -1833,10 +1834,10 @@ SendResp_dlnafile(struct upnphttp *h, char *object)
 		/* Cache the result */
 		last_file.id = id;
 		last_file.client = ctype;
-		strncpy(last_file.path, result[3], sizeof(last_file.path)-1);
-		if( result[4] )
+		strncpy(last_file.path, result[4], sizeof(last_file.path)-1);
+		if( result[5] )
 		{
-			strncpy(last_file.mime, result[4], sizeof(last_file.mime)-1);
+			strncpy(last_file.mime, result[5], sizeof(last_file.mime)-1);
 			/* From what I read, Samsung TV's expect a [wrong] MIME type of x-mkv. */
 			if( cflags & FLAG_SAMSUNG )
 			{
@@ -1856,10 +1857,13 @@ SendResp_dlnafile(struct upnphttp *h, char *object)
 					strcpy(last_file.mime+6, "divx");
 			}
 		}
-		if( result[5] )
+		if( result[6] )
 			snprintf(last_file.dlna, sizeof(last_file.dlna), "DLNA.ORG_PN=%s;", result[5]);
 		else
 			last_file.dlna[0] = '\0';
+
+		last_file.rotation = result[7] ? atoi(result[7]) : 0;
+
 		sqlite3_free_table(result);
 	}
 #if USE_FORK
@@ -1904,7 +1908,19 @@ SendResp_dlnafile(struct upnphttp *h, char *object)
 	}
 
 	offset = h->req_RangeStart;
-	sendfh = open(last_file.path, O_RDONLY);
+
+	if ( strcmp(last_file.mime, "image/jpeg" ) == 0
+		  && last_file.rotation != 0 )
+	{
+		DPRINTF(E_INFO, L_HTTP, "********** Rotation - starting\n");
+		sendfh = do_rotation(last_file.path, last_file.rotation);
+		DPRINTF(E_INFO, L_HTTP, "********** Rotation - finished\n");
+	}
+	else
+	{
+		sendfh = open(last_file.path, O_RDONLY);
+	}
+
 	if( sendfh < 0 ) {
 		DPRINTF(E_ERROR, L_HTTP, "Error opening %s\n", last_file.path);
 		Send404(h);
