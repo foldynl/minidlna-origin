@@ -2,3 +2,4 @@ Extra Features
 - dynamic versioning - version number depends on "git describe" string (git-versioning branch)
                      - enabled by configure --enable-gitversioning
 - video thumbnail - video file has a image icon if image file with same name + .jpg exists in same directory
+- image rotation - automatic image rotation based on EXIF information - jpegtran is used
